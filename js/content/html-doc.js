@@ -71,6 +71,12 @@ var readAloudDoc = new function() {
     }
     $(toRead).addClass("read-aloud");   //for debugging only
 
+    if (location.hostname === "truyenyy.vip") {
+      toRead.splice(-3, 3);
+    } else if (location.hostname === "metruyencv.com") {
+      toRead = toRead.slice(0, 3);
+    }
+
     //extract texts
     return toRead.flatMap(getTexts).filter(isNotEmpty);
   }
@@ -164,7 +170,13 @@ var readAloudDoc = new function() {
   }
 
   function getText(elem) {
-    return addMissingPunctuation(elem.innerText).trim();
+    const text = addMissingPunctuation(elem.innerText).trim();
+
+    if (location.hostname === "metruyencv.com") {
+      return text.replace(/·/g, "");
+    }
+
+    return text;
   }
 
   function addMissingPunctuation(text) {
