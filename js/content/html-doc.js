@@ -75,6 +75,9 @@ var readAloudDoc = new function() {
       toRead.splice(-3, 3);
     } else if (location.hostname === "metruyencv.com") {
       toRead = toRead.slice(0, 3);
+    } else if (location.hostname === "docln.net") {
+      toRead.splice(2, 1)
+      toRead = toRead.slice(0, 3);
     }
 
     //extract texts
