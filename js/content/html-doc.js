@@ -74,10 +74,12 @@ var readAloudDoc = new function() {
     if (location.hostname === "truyenyy.vip") {
       toRead.splice(-3, 3);
     } else if (location.hostname === "metruyencv.com") {
-      toRead = toRead.slice(0, 3);
+      toRead = toRead.slice(1, 3);
     } else if (location.hostname === "docln.net") {
       toRead.splice(2, 1)
       toRead = toRead.slice(0, 3);
+    } else if (location.hostname === "sangtacviet.com") {
+      toRead = toRead.slice(2, -1);
     }
 
     //extract texts
@@ -177,6 +179,10 @@ var readAloudDoc = new function() {
 
     if (location.hostname === "metruyencv.com") {
       return text.replace(/·/g, "");
+    } else if (location.hostname === "docln.net") {
+      return text.replace(/>>(.+?)<</g, '$1');
+    } else if (location.hostname === "sangtacviet.com") {
+      return text.replace('@Bạn đang đọc bản lưu trong hệ thống', '').replace(/^Người mua: */, '');
     }
 
     return text;
