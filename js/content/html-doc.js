@@ -178,11 +178,11 @@ var readAloudDoc = new function() {
     const text = addMissingPunctuation(elem.innerText).trim();
 
     if (location.hostname === "metruyencv.com") {
-      return text.replace(/·/g, "");
+      return text.replaceAll(/·/g, "").replaceAll("—— ——", "").replaceAll("----", "");
     } else if (location.hostname === "docln.net") {
-      return text.replace(/>>(.+?)<</g, '$1');
+      return text.replaceAll(/>>(.+?)<</g, '$1');
     } else if (location.hostname === "sangtacviet.com") {
-      return text.replace('@Bạn đang đọc bản lưu trong hệ thống', '').replace(/^Người mua: */, '');
+      return text.replaceAll('@Bạn đang đọc bản lưu trong hệ thống', '').replace(/^Người mua: *$./, '');
     }
 
     return text;
