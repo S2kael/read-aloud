@@ -1,9 +1,14 @@
 
 (function() {
   const queryString = getQueryString()
-  const settingsObservable = makeSettingsObservable()
   const domReadyPromise = domReady()
-  const voicesPromise = getVoices()
+  const playerCheckIn$ = new rxjs.Subject()
+
+  registerMessageListener("options", {
+    playerCheckIn() {
+      playerCheckIn$.next()
+    }
+  })
 
 
   //i18n
@@ -18,7 +23,7 @@
       if (queryString.referer) {
         $("button.close").show()
           .click(function() {
-            location.href = queryString.referer;
+            history.back();
           })
       }
     })
@@ -43,7 +48,9 @@
     })
 
   rxjs.combineLatest([
-      settingsObservable.of("authToken").pipe(rxjs.switchMap(token => token ? getAccountInfo(token) : Promise.resolve(null))),
+      observeSetting("authToken").pipe(
+        rxjs.switchMap(token => token ? getAccountInfo(token) : Promise.resolve(null))
+      ),
       domReadyPromise
     ])
     .subscribe(([account]) => showAccountInfo(account))
@@ -66,21 +73,21 @@
       $("#voices")
         .change(function() {
           var voiceName = $(this).val();
-          if (voiceName == "@custom") location.href = "custom-voices.html";
-          else if (voiceName == "@languages") location.href = "languages.html";
+          if (voiceName == "@custom") brapi.tabs.create({url: "custom-voices.html"});
+          else if (voiceName == "@languages") brapi.tabs.create({url: "languages.html"});
           else if (voiceName == "@premium") brapi.tabs.create({url: "premium-voices.html"});
           else if (voiceName == "@piper") bgPageInvoke("managePiperVoices").catch(console.error)
           else updateSettings({voiceName})
         });
       $("#languages-edit-button")
         .click(function() {
-          location.href = "languages.html";
+          brapi.tabs.create({url: "languages.html"});
         })
     })
 
   const voicesPopulatedObservable = rxjs.combineLatest([
-    voicesPromise,
-    settingsObservable.of("languages"),
+    voices$,
+    observeSetting("languages"),
     brapi.i18n.getAcceptLanguages().catch(err => {console.error(err); return []}),
     domReadyPromise
   ]).pipe(
@@ -88,11 +95,18 @@
       rxjs.share()
     )
 
-  rxjs.combineLatest([settingsObservable.of("voiceName"), voicesPopulatedObservable])
+  rxjs.combineLatest([observeSetting("voiceName"), voicesPopulatedObservable])
     .subscribe(([voiceName]) => {
       $("#voices").val(voiceName || "")
-      $("#voice-info").toggle(!!voiceName && isGoogleWavenet({voiceName}))
     })
+
+  rxjs.combineLatest(
+    observeSetting("voiceName"),
+    observeSetting("gcpCreds"),
+    domReadyPromise
+  ).subscribe(([voiceName, gcpCreds]) => {
+    $("#voice-info").toggle(!!voiceName && isGoogleWavenet({voiceName}) && !gcpCreds)
+  })
 
 
 
@@ -121,9 +135,9 @@
       return slider
     })
 
-  const rateObservable = settingsObservable.of("voiceName")
+  const rateObservable = observeSetting("voiceName")
     .pipe(
-      rxjs.switchMap(voiceName => settingsObservable.of("rate" + (voiceName || ""))),
+      rxjs.switchMap(voiceName => observeSetting("rate" + (voiceName || ""))),
       rxjs.share()
     )
 
@@ -133,9 +147,9 @@
       $("#rate-input").val(rate || defaults.rate)
     })
 
-  rxjs.combineLatest([settingsObservable.of("voiceName"), rateObservable, domReadyPromise])
+  rxjs.combineLatest([observeSetting("voiceName"), rateObservable, domReadyPromise])
     .subscribe(([voiceName, rate]) => {
-      $("#rate-warning").toggle((!voiceName || !isRemoteVoice({voiceName})) && rate > 2)
+      $("#rate-warning").toggle((!voiceName || isNativeVoice({voiceName})) && rate > 2)
     })
 
 
@@ -150,7 +164,7 @@
         })
     })
 
-  rxjs.combineLatest([settingsObservable.of("pitch"), pitchSliderPromise])
+  rxjs.combineLatest([observeSetting("pitch"), pitchSliderPromise])
     .subscribe(([pitch, slider]) => slider.setValue(pitch || defaults.pitch))
 
 
@@ -165,7 +179,7 @@
         })
     })
 
-  rxjs.combineLatest([settingsObservable.of("volume"), volumeSliderPromise])
+  rxjs.combineLatest([observeSetting("volume"), volumeSliderPromise])
     .subscribe(([volume, slider]) => slider.setValue(volume || defaults.volume))
 
 
@@ -179,7 +193,7 @@
         })
     })
 
-  rxjs.combineLatest([settingsObservable.of("showHighlighting"), domReadyPromise])
+  rxjs.combineLatest([observeSetting("showHighlighting"), domReadyPromise])
     .subscribe(([showHighlighting]) => $("#show-highlighting").val(showHighlighting || defaults.showHighlighting))
 
 
@@ -196,7 +210,7 @@
       $(".audio-playback-visible").toggle(settings.useEmbeddedPlayer ? true : false)
     })
 
-  rxjs.combineLatest([settingsObservable.of("useEmbeddedPlayer"), domReadyPromise])
+  rxjs.combineLatest([observeSetting("useEmbeddedPlayer"), domReadyPromise])
     .subscribe(([useEmbeddedPlayer]) => {
       $("#audio-playback").val(useEmbeddedPlayer ? "true" : "false")
     })
@@ -223,7 +237,7 @@
         .click(async function() {
           try {
             var voiceName = $("#voices").val();
-            var voice = voiceName && findVoiceByName(await voicesPromise, voiceName);
+            var voice = voiceName && findVoiceByName(await rxjs.firstValueFrom(voices$), voiceName);
             var lang = (voice && voice.lang || "en-US").split("-")[0];
             $("#test-voice .spinner").show();
             $("#status").parent().hide();
@@ -255,33 +269,13 @@
       $("#status").parent().hide()
     })
 
-  settingsObservable.changes
+  settingsChange$
     .subscribe(() => {
       showConfirmation()
       bgPageInvoke("stop").catch(err => "OK")
     })
 
 
-
-
-
-
-
-
-  function makeSettingsObservable() {
-    const changes = new rxjs.Observable(observer => brapi.storage.local.onChanged.addListener(changes => observer.next(changes)))
-      .pipe(rxjs.share())
-    return {
-      changes,
-      of(name) {
-        return rxjs.from(brapi.storage.local.get([name]))
-          .pipe(
-            rxjs.map(settings => settings[name]),
-            rxjs.concatWith(changes.pipe(rxjs.filter(settings => name in settings), rxjs.map(settings => settings[name].newValue))),
-          )
-      }
-    }
-  }
 
 
 
@@ -302,7 +296,9 @@
     })
     var voices = !selectedLangs ? allVoices : allVoices.filter(
       function(voice) {
-        return !voice.lang || selectedLangs.includes(voice.lang.split('-',1)[0]);
+        return !voice.lang || selectedLangs.includes(voice.lang.split('-',1)[0])
+          || isPiperVoice(voice)
+          || isOpenai(voice)
       });
 
     //group by standard/premium
@@ -389,8 +385,11 @@
   function voiceSorter(a, b) {
     function getWeight(voice) {
       var weight = 0
-      if (isRemoteVoice(voice)) weight += 10
+      //native voices should appear before non-natives in Standard group
+      if (!isNativeVoice(voice)) weight += 10
+      //ReadAloud Generic Voice should appear first among the non-natives
       if (!isReadAloudCloud(voice)) weight += 1
+      //UseMyPhone should appear last in Offline group
       if (isUseMyPhone(voice)) weight += 1
       return weight
     }
@@ -422,7 +421,7 @@
               })
             break;
           case "#auth-wavenet":
-            requestPermissions(config.wavenetPerms)
+            brapi.permissions.request(config.wavenetPerms)
               .then(function(granted) {
                 if (granted) bgPageInvoke("authWavenet");
               })
@@ -430,6 +429,23 @@
           case "#connect-phone":
             location.href = "connect-phone.html"
             break
+        }
+      })
+    }
+    else if (config.browserId == "opera" && /locked fullscreen/.test(err.message)) {
+      $("#status").html("Click <a href='#open-player-tab'>here</a> to start read aloud.").parent().show()
+      $("#status a").click(async function() {
+        try {
+          playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#test-voice").click())
+          const tab = await brapi.tabs.create({
+            url: "player.html?opener=options&autoclose=long",
+            index: 0,
+            active: false,
+          })
+          brapi.tabs.update(tab.id, {pinned: true})
+            .catch(console.error)
+        } catch (err) {
+          handleError(err)
         }
       })
     }

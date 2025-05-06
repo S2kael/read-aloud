@@ -1,5 +1,12 @@
 
 var queryString = getQueryString()
+const playerCheckIn$ = new rxjs.Subject()
+
+registerMessageListener("popup", {
+  playerCheckIn() {
+    playerCheckIn$.next()
+  }
+})
 
 const piperInitializingSubject = new rxjs.Subject()
 piperInitializingSubject
@@ -85,7 +92,7 @@ function handleError(err) {
           brapi.tabs.create({url: "chrome://extensions/?id=" + brapi.runtime.id});
           break;
         case "#request-permissions":
-          requestPermissions(errInfo.perms)
+          brapi.permissions.request(errInfo.perms)
             .then(function(granted) {
               if (granted) {
                 if (errInfo.reload) return reloadAndPlay()
@@ -103,7 +110,7 @@ function handleError(err) {
             })
           break;
         case "#auth-wavenet":
-          requestPermissions(config.wavenetPerms)
+          brapi.permissions.request(config.wavenetPerms)
             .then(function(granted) {
               if (granted) bgPageInvoke("authWavenet");
             })
@@ -114,6 +121,23 @@ function handleError(err) {
         case "#connect-phone":
           location.href = "connect-phone.html"
           break
+      }
+    })
+  }
+  else if (config.browserId == "opera" && /locked fullscreen/.test(err.message)) {
+    $("#status").html("Click <a href='#open-player-tab'>here</a> to start read aloud.").show()
+    $("#status a").click(async function() {
+      try {
+        playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#btnPlay").click())
+        const tab = await brapi.tabs.create({
+          url: "player.html?opener=popup&autoclose=long",
+          index: 0,
+          active: false,
+        })
+        brapi.tabs.update(tab.id, {pinned: true})
+          .catch(console.error)
+      } catch (err) {
+        handleError(err)
       }
     })
   }
@@ -267,7 +291,7 @@ function onStop() {
 }
 
 function onSettings() {
-  location.href = "options.html?referer=" + encodeURIComponent(location.pathname + location.search);
+  location.href = "options.html?referer=popup.html";
 }
 
 function onForward() {
