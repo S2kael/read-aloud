@@ -74,7 +74,7 @@ var readAloudDoc = new function() {
     if (location.hostname === "truyenyy.vip") {
       toRead.splice(-3, 3);
     } else if (location.hostname === "metruyencv.com") {
-      toRead = toRead.slice(1, 3);
+      toRead = toRead.slice(0, 3);
     } else if (location.hostname === "docln.net") {
       toRead.splice(2, 1)
       toRead = toRead.slice(0, 3);
@@ -175,7 +175,7 @@ var readAloudDoc = new function() {
   }
 
   function getText(elem) {
-    const text = addMissingPunctuation(elem.innerText).trim();
+    const text = addMissingPunctuation(elem.innerText).trim().replaceAll('Nhìn sướng rên tiểu thuyết, liền lên phi lô tiểu thuyết Internet', '');
 
     if (location.hostname === "metruyencv.com") {
       return text.replaceAll(/·/g, "").replaceAll("—— ——", "").replaceAll("----", "");
